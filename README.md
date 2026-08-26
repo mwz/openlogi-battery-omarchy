@@ -25,7 +25,7 @@ The plugin does not install OpenLogi or write device settings. It calls
 Install from the Git repository and enable the bar widget:
 
 ```sh
-omarchy plugin add <git-url> --enable
+omarchy plugin add https://github.com/mwz/openlogi-omarchy-plugin --enable
 ```
 
 Omarchy places the widget in the right section by default. It can be moved with
