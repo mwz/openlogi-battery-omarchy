@@ -140,7 +140,8 @@ BarWidget {
               required property var modelData
 
               width: parent.width
-              height: Math.max(deviceIcon.implicitHeight, deviceName.implicitHeight, batteryLevel.implicitHeight)
+              height: Math.max(deviceIcon.implicitHeight, deviceName.implicitHeight,
+                connectionIcon.implicitHeight, batteryLevel.implicitHeight)
                 + Style.space(8)
 
               Text {
@@ -168,9 +169,30 @@ BarWidget {
               }
 
               Text {
+                id: connectionIcon
+                anchors.right: batteryLevel.left
+                anchors.rightMargin: Style.space(10)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Style.space(18)
+                text: Model.connectionIcon(deviceRow.modelData.connectionKind)
+                color: root.popupDim
+                font.family: root.bar ? root.bar.fontFamily : Style.font.family
+                font.pixelSize: Style.font.bodySmall
+                horizontalAlignment: Text.AlignHCenter
+
+                HoverHandler {
+                  id: connectionHover
+                }
+
+                ToolTip.visible: connectionHover.hovered
+                ToolTip.text: deviceRow.modelData.connectionLabel
+                ToolTip.delay: 400
+              }
+
+              Text {
                 id: deviceName
                 anchors.left: deviceIcon.right
-                anchors.right: batteryLevel.left
+                anchors.right: connectionIcon.left
                 anchors.leftMargin: Style.space(8)
                 anchors.rightMargin: Style.space(12)
                 anchors.verticalCenter: parent.verticalCenter

@@ -6,10 +6,7 @@
   "author": "mwz",
   "license": "MIT",
   "description": "Connected OpenLogi device battery levels in the Omarchy bar.",
-  "kinds": [
-    "service",
-    "bar-widget"
-  ],
+  "kinds": ["service", "bar-widget"],
   "keepLoaded": true,
   "entryPoints": {
     "service": "Service.qml",

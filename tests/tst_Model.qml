@@ -31,6 +31,10 @@ TestCase {
     compare(connected.length, 2)
     compare(connected[0].name, "MX Master 3S")
     compare(connected[1].name, "Wireless Mouse MX Master")
+    compare(connected[0].connectionKind, "bolt")
+    compare(connected[0].connectionLabel, "Logi Bolt receiver")
+    compare(connected[1].connectionKind, "bluetooth")
+    compare(connected[1].connectionLabel, "Bluetooth (direct)")
 
     var lowest = Model.lowestBatteryDevice(connected)
     compare(lowest.name, "MX Master 3S")
@@ -49,6 +53,69 @@ TestCase {
     compare(Model.deviceIcon("joystick"), "󰊖")
     compare(Model.deviceIcon("tablet"), "󰁹")
     compare(Model.deviceIcon("future-device"), "󰁹")
+  }
+
+  function test_connectionIconMappings() {
+    compare(Model.connectionIcon("bolt"), "󱐋")
+    compare(Model.connectionIcon("bluetooth"), "󰂯")
+    compare(Model.connectionIcon("usb"), "󰕓")
+    compare(Model.connectionIcon("unifying"), "󰖩")
+    compare(Model.connectionIcon("lightspeed"), "󰖩")
+    compare(Model.connectionIcon("receiver"), "󰖩")
+    compare(Model.connectionIcon("future-transport"), "?")
+  }
+
+  function test_receiverConnectionKindsComeFromInventoryParent() {
+    var output = [
+      "Logi Bolt Receiver (DEADBEEFDEADBEEF, vid=0000 pid=0010)",
+      deviceLine("Bolt Mouse", "mouse", "80% full (discharging)"),
+      "",
+      "Unifying Receiver (DEADBEEFDEADBEEF, vid=0000 pid=0011)",
+      deviceLine("Unifying Mouse", "mouse", "70% full (discharging)"),
+      "",
+      "Lightspeed Receiver (DEADBEEFDEADBEEF, vid=0000 pid=0012)",
+      deviceLine("Lightspeed Mouse", "mouse", "60% full (discharging)"),
+      "",
+      "Future Receiver (DEADBEEFDEADBEEF, vid=0000 pid=0013)",
+      deviceLine("Generic Mouse", "mouse", "50% full (discharging)")
+    ].join("\n")
+
+    var connected = Model.onlineDevices(Model.parseList(output).devices)
+    compare(connected[0].connectionKind, "bolt")
+    compare(connected[1].connectionKind, "receiver")
+    compare(connected[2].connectionKind, "lightspeed")
+    compare(connected[3].connectionKind, "unifying")
+  }
+
+  function test_directWiredConnectionUsesCurrentModelPid() {
+    var output = [
+      "Wired Test Mouse (—, vid=0000 pid=0020)",
+      "  └─ slot 255 ● Wired Test Mouse (mouse, wpid=?, battery=100% full (charging))",
+      "          model_ids=[0020,0000,0000] ext=00 serial=— unit_id=deadbeef transports=usb"
+    ].join("\n")
+    var device = Model.parseList(output).devices[0]
+    compare(device.connectionKind, "usb")
+    compare(device.connectionLabel, "Wired USB")
+  }
+
+  function test_directClassicBluetoothConnection() {
+    var output = [
+      "Bluetooth Test Mouse (—, vid=0000 pid=0021)",
+      "  └─ slot 255 ● Bluetooth Test Mouse (mouse, wpid=?, battery=65% good (discharging))",
+      "          model_ids=[0021,0000,0000] ext=00 serial=— unit_id=deadbeef transports=bt"
+    ].join("\n")
+    compare(Model.parseList(output).devices[0].connectionKind, "bluetooth")
+  }
+
+  function test_unknownDirectConnectionDoesNotGuessFromCapabilities() {
+    var output = [
+      "Direct Test Mouse (—, vid=0000 pid=0022)",
+      "  └─ slot 255 ● Direct Test Mouse (mouse, wpid=?, battery=65% good (discharging))",
+      "          model_ids=[0023,0000,0000] ext=00 serial=— unit_id=deadbeef transports=btle"
+    ].join("\n")
+    var device = Model.parseList(output).devices[0]
+    compare(device.connectionKind, "direct")
+    compare(device.connectionLabel, "Connection unknown")
   }
 
   function test_keyboardKindIsParsedExactly() {

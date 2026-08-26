@@ -6,6 +6,10 @@ var ICON_KEYBOARD = "󰌌"
 var ICON_TOUCHPAD = "󰟸"
 var ICON_HEADSET = "󰋎"
 var ICON_GAMEPAD = "󰊖"
+var ICON_BOLT = "󱐋"
+var ICON_BLUETOOTH = "󰂯"
+var ICON_USB = "󰕓"
+var ICON_WIRELESS = "󰖩"
 
 function deviceIcon(kind) {
   switch (String(kind || "").trim().toLowerCase()) {
@@ -24,6 +28,42 @@ function deviceIcon(kind) {
     return ICON_GAMEPAD
   default:
     return ICON_BATTERY
+  }
+}
+
+function connectionIcon(kind) {
+  switch (String(kind || "").trim().toLowerCase()) {
+  case "bolt":
+    return ICON_BOLT
+  case "bluetooth":
+    return ICON_BLUETOOTH
+  case "usb":
+    return ICON_USB
+  case "unifying":
+  case "lightspeed":
+  case "receiver":
+    return ICON_WIRELESS
+  default:
+    return "?"
+  }
+}
+
+function connectionLabel(kind) {
+  switch (String(kind || "").trim().toLowerCase()) {
+  case "bolt":
+    return "Logi Bolt receiver"
+  case "unifying":
+    return "Logitech Unifying receiver"
+  case "lightspeed":
+    return "Logitech Lightspeed receiver"
+  case "bluetooth":
+    return "Bluetooth (direct)"
+  case "usb":
+    return "Wired USB"
+  case "receiver":
+    return "Logitech receiver"
+  default:
+    return "Connection unknown"
   }
 }
 
@@ -90,19 +130,103 @@ function parseDeviceLine(line, order) {
   }
 }
 
+function parseInventoryHeader(line) {
+  var header = String(line || "").match(/^(.+?)\s+\([^,]*,\s*vid=([0-9a-f]{4})\s+pid=([0-9a-f]{4})\)\s*$/i)
+  if (!header) return null
+  return {
+    name: String(header[1] || "").trim(),
+    productId: parseInt(header[3], 16)
+  }
+}
+
+function connectionFromParent(parent, slot) {
+  if (!parent) return slot === 255 ? "direct" : "receiver"
+
+  var name = String(parent.name || "").toLowerCase()
+  if (name.indexOf("bolt receiver") !== -1 || parent.productId === 0xc548) return "bolt"
+  if (name.indexOf("lightspeed receiver") !== -1
+      || parent.productId === 0xc53f
+      || parent.productId === 0xc547) {
+    return "lightspeed"
+  }
+  if (name.indexOf("unifying receiver") !== -1
+      || parent.productId === 0xc52b
+      || parent.productId === 0xc532
+      || parent.productId === 0xc539) {
+    return "unifying"
+  }
+  return slot === 255 ? "direct" : "receiver"
+}
+
+function parseModelLine(line) {
+  var model = String(line || "").match(/\bmodel_ids=\[([0-9a-f,\s]+)\].*\btransports=([^\s]+)\s*$/i)
+  if (!model) return null
+
+  var modelIds = model[1].split(",").map(function(value) {
+    return parseInt(String(value || "").trim(), 16)
+  })
+  var transports = String(model[2] || "").toLowerCase().split("+")
+  return { modelIds: modelIds, transports: transports }
+}
+
+function directConnectionFromModel(parentProductId, model) {
+  if (!model || !Number.isFinite(parentProductId)) return "direct"
+
+  // HID++ packs model IDs in transport-bit order, not in the printed field
+  // order: classic Bluetooth, BTLE, eQuad, then USB.
+  var transportOrder = ["bt", "btle", "equad", "usb"]
+  var enabled = []
+  for (var i = 0; i < transportOrder.length; i++) {
+    if (model.transports.indexOf(transportOrder[i]) !== -1) enabled.push(transportOrder[i])
+  }
+
+  for (var j = 0; j < enabled.length && j < model.modelIds.length; j++) {
+    if (model.modelIds[j] !== parentProductId) continue
+    if (enabled[j] === "bt" || enabled[j] === "btle") return "bluetooth"
+    if (enabled[j] === "usb") return "usb"
+    return "direct"
+  }
+  return "direct"
+}
+
 function parseList(output) {
   var text = String(output || "")
   var lines = text.split(/\r?\n/)
   var devices = []
   var malformed = []
   var order = 0
+  var currentParent = null
+  var lastDevice = null
 
   for (var i = 0; i < lines.length; i++) {
+    var header = parseInventoryHeader(lines[i])
+    if (header) {
+      currentParent = header
+      lastDevice = null
+      continue
+    }
+
     var parsed = parseDeviceLine(lines[i], order)
-    if (!parsed) continue
-    order += 1
-    if (parsed.malformed) malformed.push(parsed.line)
-    else devices.push(parsed)
+    if (parsed) {
+      order += 1
+      if (parsed.malformed) {
+        malformed.push(parsed.line)
+        lastDevice = null
+      } else {
+        parsed.connectionKind = connectionFromParent(currentParent, parsed.slot)
+        parsed.connectionLabel = connectionLabel(parsed.connectionKind)
+        devices.push(parsed)
+        lastDevice = parsed
+      }
+      continue
+    }
+
+    var model = parseModelLine(lines[i])
+    if (model && lastDevice && lastDevice.slot === 255) {
+      var parentProductId = currentParent ? currentParent.productId : NaN
+      lastDevice.connectionKind = directConnectionFromModel(parentProductId, model)
+      lastDevice.connectionLabel = connectionLabel(lastDevice.connectionKind)
+    }
   }
 
   if (malformed.length > 0) {
