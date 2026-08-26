@@ -3,13 +3,15 @@
 `mwz.openlogi` is a read-only Omarchy bar plugin for battery levels reported by
 [OpenLogi](https://github.com/AprilNEA/OpenLogi).
 
+![a screenshot of the widget](assets/widget.png)
+
 The bar shows the lowest readable battery percentage among connected devices.
 Click it to open an alphabetically sorted list of connected devices and their
 battery levels. Mouse, trackball, keyboard, numpad, touchpad, headset, gamepad
-and joystick device types receive matching Nerd Font glyphs; unknown types use
-a battery glyph. Each popup row also shows how the device is connected:
-Logi Bolt, Unifying and Lightspeed receivers, Bluetooth-direct, or wired USB.
-Hover over the connection glyph for its label.
+and joystick device types receive matching Nerd Font glyphs; unknown types use a
+battery glyph. Each popup row also shows how the device is connected: Logi Bolt,
+Unifying and Lightspeed receivers, Bluetooth-direct, or wired USB. Hover over
+the connection glyph for its label.
 
 ## Requirements
 
