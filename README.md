@@ -1,6 +1,6 @@
 # OpenLogi Battery Indicator for Omarchy
 
-_An Omarchy battery widget using the OpenLogi CLI._
+_An Omarchy battery widget that uses the OpenLogi command-line interface (CLI)._
 
 `mwz.openlogi-battery` is a read-only Omarchy bar plugin for battery levels
 reported by [OpenLogi](https://github.com/AprilNEA/OpenLogi).
@@ -9,29 +9,39 @@ reported by [OpenLogi](https://github.com/AprilNEA/OpenLogi).
 
 The bar shows the lowest readable battery percentage among connected devices.
 Click it to open an alphabetically sorted list of connected devices and their
-battery levels. Mouse, trackball, keyboard, numpad, touchpad, headset, gamepad
-and joystick device types receive matching Nerd Font glyphs; unknown types use a
-battery glyph. Each popup row also shows how the device is connected: Logi Bolt,
-Unifying and Lightspeed receivers, Bluetooth-direct, or wired USB. Hover over
-the connection glyph for its label.
+battery levels. Mouse, trackball, keyboard, numpad, touchpad, headset, gamepad,
+and joystick devices use matching Nerd Font icons. Unknown devices use a battery
+icon. Each popup row also shows the connection type. The supported types are
+Logi Bolt, Unifying, and Lightspeed receivers, direct Bluetooth, and wired USB.
+
+Point to the connection icon to see its label.
 
 ## Requirements
 
-- Omarchy 4 with the Quickshell-based shell plugin system
-- `openlogi` available on `PATH`
-- A Nerd Font configured for the Omarchy bar (the Omarchy default works)
+- Omarchy 4 with its Quickshell plugin system
+- OpenLogi installed and the `openlogi` command available in your shell
+- A Nerd Font for the Omarchy bar (the default font works)
 
-Install and configure OpenLogi by following its
-[official Linux instructions](https://github.com/AprilNEA/OpenLogi#installation),
-then confirm that the CLI is available and can inspect your devices:
+On Omarchy, install the community-maintained
+[`openlogi-bin`](https://aur.archlinux.org/packages/openlogi-bin) package from
+the Arch User Repository (AUR):
+
+```sh
+yay -S openlogi-bin
+```
+
+Alternatively, install OpenLogi with its
+[official Linux instructions](https://github.com/AprilNEA/OpenLogi#installation).
+Make sure that the CLI can inspect your devices:
 
 ```sh
 openlogi --version
 openlogi list
 ```
 
-The plugin does not install OpenLogi or write device settings. It calls
-`openlogi list` at startup, every five minutes, and whenever its popup opens.
+The plugin does not install OpenLogi. It does not change the device
+configuration. The plugin runs `openlogi list` at startup and every five
+minutes. It also runs the command each time that the popup opens.
 
 ## Install
 
@@ -41,8 +51,9 @@ Install from the Git repository and enable the bar widget:
 omarchy plugin add https://github.com/mwz/openlogi-battery-omarchy --enable
 ```
 
-Omarchy places the widget in the right section by default. It can be moved with
-the normal bar command:
+Omarchy places the widget in the right section by default.
+
+Use this command to move the widget:
 
 ```sh
 omarchy bar move mwz.openlogi-battery --section center
@@ -68,27 +79,28 @@ This does not remove OpenLogi or change its configuration.
 
 ## Privacy and security
 
-The plugin runs only `openlogi list` through the local shell. Its output is kept
-in the Omarchy shell process's memory and is not written to disk or sent over
-the network by this plugin. The plugin does not request elevated privileges.
+The plugin runs only the local `openlogi list` command. The plugin keeps the
+output in the memory of the Omarchy shell process. The plugin does not write the
+output to disk. It does not send the output over the network. It does not
+request administrator access.
 
-## Develop and verify
+## Develop and test
 
-From this repository:
+Run the tests from this repository:
 
 ```sh
 ./tests/run
 ```
 
-Set `OMARCHY_PATH` when testing against an Omarchy source checkout somewhere
-other than `/usr/share/omarchy`.
+If the Omarchy source is outside `/usr/share/omarchy`, set `OMARCHY_PATH` to its
+location.
 
-The OpenLogi CLI currently exposes human-readable rather than structured list
-output. Parsing is isolated in `Model.js` so a future machine-readable command
-can replace it without changing the UI. Its `transports=` field describes the
-connections supported by the model, not necessarily the live connection; the
-plugin therefore combines the inventory parent, direct-device slot and current
-product ID instead of treating the first listed transport as active.
+The OpenLogi CLI returns plain text instead of structured data. `Model.js`
+parses this text. A future machine-readable command can replace the text-reading
+code without changes to the user interface. The `transports=` field lists the
+connection types that the model supports. It does not identify the current
+connection. The plugin uses the parent device in the inventory, the
+direct-device slot, and the current product ID to identify that connection.
 
 This is an independent community plugin. It is not affiliated with or endorsed
 by OpenLogi, Logitech or Omarchy.

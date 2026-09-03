@@ -251,7 +251,7 @@ function parseList(output) {
       ok: false,
       noHardware: false,
       devices: [],
-      error: "Unsupported openlogi list device row"
+      error: "OpenLogi returned device data that this plugin cannot read"
     }
   }
 

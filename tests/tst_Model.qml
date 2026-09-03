@@ -246,7 +246,7 @@ TestCase {
   function test_malformedDeviceRowFailsClosed() {
     var parsed = Model.parseList("  └─ slot 1 ● Changed output format")
     verify(!parsed.ok)
-    compare(parsed.error, "Unsupported openlogi list device row")
+    compare(parsed.error, "OpenLogi returned device data that this plugin cannot read")
   }
 
   function test_outOfRangePercentageFailsClosed() {

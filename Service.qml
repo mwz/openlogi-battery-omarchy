@@ -31,7 +31,7 @@ Item {
     devices = []
     lowestDevice = null
     status = "error"
-    lastError = conciseError(message, "Could not read OpenLogi devices")
+    lastError = conciseError(message, "The plugin cannot read OpenLogi devices")
   }
 
   function applyOutput(output) {
