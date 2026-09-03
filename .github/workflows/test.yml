@@ -14,9 +14,18 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-24.04
+    container:
+      image: archlinux:base
     timeout-minutes: 10
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
+      - name: Install test dependencies
+        run: pacman -Syu --noconfirm --needed git jq quickshell
+
       - name: Check out plugin
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -28,13 +37,6 @@ jobs:
           repository: omacom/omarchy
           ref: quattro
           path: omarchy
-
-      - name: Install Qt
-        uses: jurplel/install-qt-action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
-        with:
-          version: 6.11.2
-          cache: true
-          cache-key-prefix: openlogi-battery-qt-6.11.2
 
       - name: Run checks
         env:
