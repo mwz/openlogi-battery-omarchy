@@ -12,14 +12,14 @@ Item {
 
   property var devices: []
   property var lowestDevice: null
-  property string state: "loading"
+  property string status: "loading"
   property string lastError: ""
   property bool refreshing: false
   property bool refreshPending: false
   property bool timedOut: false
 
   readonly property bool hasReadableBattery: lowestDevice !== null
-  readonly property bool failed: state === "error"
+  readonly property bool failed: status === "error"
 
   function conciseError(value, fallback) {
     var message = String(value || "").replace(/\s+/g, " ").trim()
@@ -30,7 +30,7 @@ Item {
   function fail(message) {
     devices = []
     lowestDevice = null
-    state = "error"
+    status = "error"
     lastError = conciseError(message, "Could not read OpenLogi devices")
   }
 
@@ -44,7 +44,7 @@ Item {
     var connected = Model.onlineDevices(parsed.devices)
     devices = connected
     lowestDevice = Model.lowestBatteryDevice(connected)
-    state = lowestDevice ? "ready" : "empty"
+    status = lowestDevice ? "ready" : "empty"
     lastError = ""
   }
 
@@ -111,15 +111,9 @@ Item {
 
       var stdout = String(stdoutCollector.text || root.stdoutText || "")
       var stderr = String(stderrCollector.text || root.stderrText || "")
-      var parsed = Model.parseList(stdout)
-
-      if (root.timedOut) {
-        root.fail("openlogi list timed out")
-      } else if (exitCode === 0 || (exitCode === 2 && parsed.noHardware)) {
-        root.applyOutput(stdout)
-      } else {
-        root.fail(stderr || stdout || "openlogi list failed with exit code " + exitCode)
-      }
+      var result = Model.commandResult(exitCode, stdout, stderr, root.timedOut)
+      if (result.ok) root.applyOutput(result.output)
+      else root.fail(result.error)
 
       root.timedOut = false
       if (root.refreshPending) {

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+test_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd -- "$test_dir/.." && pwd)
+omarchy_root=${OMARCHY_PATH:-/usr/share/omarchy}
+validator=${OMARCHY_PLUGIN_VALIDATE:-$omarchy_root/bin/omarchy-plugin-validate}
+
+qt_tool() {
+  local name=$1
+
+  if [[ -n ${QT_ROOT_DIR:-} && -x $QT_ROOT_DIR/bin/$name ]]; then
+    printf '%s\n' "$QT_ROOT_DIR/bin/$name"
+  elif [[ -x /usr/lib/qt6/bin/$name ]]; then
+    printf '%s\n' "/usr/lib/qt6/bin/$name"
+  else
+    command -v "$name"
+  fi
+}
+
+[[ -x $validator ]] || {
+  printf 'Omarchy plugin validator not found: %s\n' "$validator" >&2
+  exit 1
+}
+
+qmllint_bin=$(qt_tool qmllint)
+qmltestrunner_bin=$(qt_tool qmltestrunner)
+qml_import_root=$(mktemp -d "${TMPDIR:-/tmp}/openlogi-battery-qmlimports.XXXXXX")
+
+cleanup() {
+  rm -r -- "$qml_import_root"
+}
+trap cleanup EXIT
+
+mkdir -p "$qml_import_root/qs"
+ln -s "$omarchy_root/shell/Commons" "$qml_import_root/qs/Commons"
+ln -s "$omarchy_root/shell/Ui" "$qml_import_root/qs/Ui"
+
+cd "$repo_root"
+
+"$validator" .
+"$qmllint_bin" -I "$qml_import_root" \
+  --missing-property disable \
+  --unqualified disable \
+  --signal-handler-parameters disable \
+  --max-warnings 0 \
+  BarWidget.qml Service.qml Model.js tests/tst_Model.qml
+env -u DISPLAY -u WAYLAND_DISPLAY \
+  QT_QPA_PLATFORM=offscreen \
+  QT_QPA_PLATFORMTHEME= \
+  QT_QUICK_BACKEND=software \
+  QT_QUICK_CONTROLS_STYLE=Basic \
+  "$qmltestrunner_bin" -input tests

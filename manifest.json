@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "id": "mwz.openlogi",
-  "name": "OpenLogi batteries",
+  "id": "mwz.openlogi-battery",
+  "name": "OpenLogi Battery Indicator",
   "version": "0.1.0",
   "author": "mwz",
   "license": "MIT",
-  "description": "Connected OpenLogi device battery levels in the Omarchy bar.",
+  "description": "Displays peripheral battery levels reported by the OpenLogi CLI.",
   "kinds": ["service", "bar-widget"],
   "keepLoaded": true,
   "entryPoints": {
@@ -13,8 +13,8 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "OpenLogi batteries",
-    "description": "Shows the lowest battery level reported by connected OpenLogi devices.",
+    "displayName": "OpenLogi Battery Indicator",
+    "description": "Displays peripheral battery levels reported by the OpenLogi CLI.",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right"

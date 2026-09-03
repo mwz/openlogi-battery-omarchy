@@ -189,6 +189,23 @@ function directConnectionFromModel(parentProductId, model) {
   return "direct"
 }
 
+function commandResult(exitCode, stdout, stderr, timedOut) {
+  var stdoutText = String(stdout || "")
+  var stderrText = String(stderr || "")
+
+  if (timedOut === true) {
+    return { ok: false, output: "", error: "openlogi list timed out" }
+  }
+
+  var parsed = parseList(stdoutText)
+  if (Number(exitCode) === 0 || (Number(exitCode) === 2 && parsed.noHardware)) {
+    return { ok: true, output: stdoutText, error: "" }
+  }
+
+  var detail = stderrText || stdoutText || "openlogi list failed with exit code " + exitCode
+  return { ok: false, output: "", error: detail }
+}
+
 function parseList(output) {
   var text = String(output || "")
   var lines = text.split(/\r?\n/)

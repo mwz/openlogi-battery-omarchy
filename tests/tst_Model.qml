@@ -5,7 +5,8 @@ import "../Model.js" as Model
 TestCase {
   name: "OpenLogiModel"
 
-  // All hardware identifiers in these fixtures are synthetic.
+  // Device names and serials are synthetic. Known receiver product IDs are
+  // used only where connection classification depends on them.
   readonly property string multipleDevicesOutput: [
     "(inventory read from the running agent)",
     "Logitech Wireless Mouse MX Master (—, vid=0000 pid=0001)",
@@ -87,6 +88,24 @@ TestCase {
     compare(connected[3].connectionKind, "unifying")
   }
 
+  function test_receiverConnectionKindsFallBackToProductId() {
+    var output = [
+      "Unknown Receiver (DEADBEEFDEADBEEF, vid=0000 pid=c548)",
+      deviceLine("Bolt by PID", "mouse", "80% full (discharging)"),
+      "",
+      "Unknown Receiver (DEADBEEFDEADBEEF, vid=0000 pid=c547)",
+      deviceLine("Lightspeed by PID", "mouse", "70% full (discharging)"),
+      "",
+      "Unknown Receiver (DEADBEEFDEADBEEF, vid=0000 pid=c539)",
+      deviceLine("Unifying by PID", "mouse", "60% full (discharging)")
+    ].join("\n")
+
+    var connected = Model.onlineDevices(Model.parseList(output).devices)
+    compare(connected[0].connectionKind, "bolt")
+    compare(connected[1].connectionKind, "lightspeed")
+    compare(connected[2].connectionKind, "unifying")
+  }
+
   function test_directWiredConnectionUsesCurrentModelPid() {
     var output = [
       "Wired Test Mouse (—, vid=0000 pid=0020)",
@@ -96,6 +115,15 @@ TestCase {
     var device = Model.parseList(output).devices[0]
     compare(device.connectionKind, "usb")
     compare(device.connectionLabel, "Wired USB")
+  }
+
+  function test_directMultiTransportUsesMatchingModelId() {
+    var output = [
+      "Wired Test Mouse (—, vid=0000 pid=00a2)",
+      "  └─ slot 255 ● Wired Test Mouse (mouse, wpid=?, battery=100% full (charging))",
+      "          model_ids=[00a1,00a2,0000] ext=00 serial=— unit_id=deadbeef transports=usb+equad"
+    ].join("\n")
+    compare(Model.parseList(output).devices[0].connectionKind, "usb")
   }
 
   function test_directClassicBluetoothConnection() {
@@ -160,6 +188,52 @@ TestCase {
     verify(parsed.ok)
     verify(parsed.noHardware)
     compare(parsed.devices.length, 0)
+  }
+
+  function test_currentNoAgentNoHardwareOutput() {
+    var output = [
+      "(no agent reachable — reading hardware directly; macOS judges this process's Input Monitoring grant, not the agent's)",
+      "No Logitech HID++ devices or webcams found.",
+      "",
+      "Notes:",
+      "  - Nothing connected"
+    ].join("\n")
+    var parsed = Model.parseList(output)
+    verify(parsed.ok)
+    verify(parsed.noHardware)
+    compare(parsed.devices.length, 0)
+  }
+
+  function test_commandResultAcceptsSuccessfulOutput() {
+    var result = Model.commandResult(0, deviceLine("Mouse", "mouse", "50% good"), "", false)
+    verify(result.ok)
+    verify(result.output.indexOf("Mouse") !== -1)
+    compare(result.error, "")
+  }
+
+  function test_commandResultAcceptsExpectedNoHardwareExit() {
+    var output = "No Logitech HID++ devices or webcams found."
+    var result = Model.commandResult(2, output, "diagnostic note", false)
+    verify(result.ok)
+    compare(result.output, output)
+  }
+
+  function test_commandResultReportsMissingCommand() {
+    var result = Model.commandResult(127, "", "openlogi command not found", false)
+    verify(!result.ok)
+    compare(result.error, "openlogi command not found")
+  }
+
+  function test_commandResultReportsOrdinaryFailure() {
+    var result = Model.commandResult(1, "partial output", "openlogi failed", false)
+    verify(!result.ok)
+    compare(result.error, "openlogi failed")
+  }
+
+  function test_commandResultReportsTimeoutFirst() {
+    var result = Model.commandResult(0, deviceLine("Mouse", "mouse", "50% good"), "", true)
+    verify(!result.ok)
+    compare(result.error, "openlogi list timed out")
   }
 
   function test_cameraOnlyOutputHasNoBatteryDevices() {

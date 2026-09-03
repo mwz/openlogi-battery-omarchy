@@ -6,7 +6,7 @@ import "Model.js" as Model
 
 BarWidget {
   id: root
-  moduleName: "mwz.openlogi"
+  moduleName: "mwz.openlogi-battery"
 
   readonly property var openlogiService: bar && bar.shell
     ? bar.shell.serviceFor(root.moduleName)
