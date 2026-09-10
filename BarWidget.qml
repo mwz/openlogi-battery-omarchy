@@ -15,8 +15,8 @@ BarWidget {
   readonly property var lowestDevice: openlogiService ? openlogiService.lowestDevice : null
   readonly property bool failed: openlogiService ? openlogiService.failed : false
   readonly property bool hasReading: lowestDevice !== null
-  readonly property color foreground: bar ? bar.foreground : Color.foreground
-  readonly property color dim: Qt.darker(foreground, 1.55)
+  readonly property color popupForeground: Color.popups.text
+  readonly property color popupDim: Qt.darker(popupForeground, 1.55)
   readonly property color urgent: bar ? bar.urgent : Color.urgent
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
@@ -75,171 +75,182 @@ BarWidget {
     }
   }
 
-  PopupCard {
+  KeyboardPanel {
     id: popup
     anchorItem: button
     bar: root.bar
     owner: root
     open: root.popupOpen
+    focusTarget: keyCatcher
     contentWidth: fittedContentWidth(Style.space(340))
     contentHeight: fittedContentHeight(contentColumn.implicitHeight, Style.space(480))
 
-    Flickable {
+    PanelKeyCatcher {
+      id: keyCatcher
       anchors.fill: parent
-      contentWidth: width
-      contentHeight: contentColumn.implicitHeight
-      clip: true
-      boundsBehavior: Flickable.StopAtBounds
-      flickableDirection: Flickable.VerticalFlick
-      interactive: contentHeight > height
+      onCloseRequested: root.close()
+      onTabRequested: function(direction) {
+        if (root.bar && typeof root.bar.switchPanelFrom === "function")
+          root.bar.switchPanelFrom(root, direction)
+      }
 
-      ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+      Flickable {
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: contentColumn.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
 
-      Column {
-        id: contentColumn
-        width: parent.width
-        spacing: Style.space(12)
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
-        PanelHero {
+        Column {
+          id: contentColumn
           width: parent.width
-          title: "OpenLogi devices"
-          meta: root.failed
-            ? "Unavailable"
-            : root.devices.length + (root.devices.length === 1 ? " device" : " devices")
-          foreground: root.foreground
-          fontFamily: root.fontFamily
+          spacing: Style.space(12)
 
-          iconComponent: Component {
-            Item {
-              width: Style.font.display
-              height: Style.font.display
+          PanelHero {
+            width: parent.width
+            title: "OpenLogi devices"
+            meta: root.failed
+              ? "Unavailable"
+              : root.devices.length + (root.devices.length === 1 ? " device" : " devices")
+            foreground: root.popupForeground
+            fontFamily: root.fontFamily
 
-              Text {
-                anchors.centerIn: parent
-                text: "󰁹"
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.display
+            iconComponent: Component {
+              Item {
+                width: Style.font.display
+                height: Style.font.display
+
+                Text {
+                  anchors.centerIn: parent
+                  text: "󰁹"
+                  color: root.popupForeground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.display
+                }
               }
             }
           }
-        }
 
-        PanelSeparator {
-          width: parent.width
-          foreground: root.foreground
-        }
-
-        BorderSurface {
-          visible: root.failed
-          width: parent.width
-          implicitHeight: errorText.implicitHeight + Style.spacing.xl * 2
-          color: root.alpha(root.urgent, 0.10)
-          borderSpec: Border.flat(root.alpha(root.urgent, 0.35), 1)
-          radius: Style.cornerRadius
-
-          Text {
-            id: errorText
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Style.space(12)
-            anchors.rightMargin: Style.space(12)
-            text: root.openlogiService ? root.openlogiService.lastError : "OpenLogi unavailable"
-            color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-            wrapMode: Text.WordWrap
-          }
-        }
-
-        Column {
-          visible: !root.failed
-          width: parent.width
-          spacing: Style.spacing.md
-
-          PanelSectionHeader {
+          PanelSeparator {
             width: parent.width
-            text: "DEVICES"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
+            foreground: root.popupForeground
           }
 
-          Repeater {
-            model: root.devices
+          BorderSurface {
+            visible: root.failed
+            width: parent.width
+            implicitHeight: errorText.implicitHeight + Style.spacing.xl * 2
+            color: root.alpha(root.urgent, 0.10)
+            borderSpec: Border.flat(root.alpha(root.urgent, 0.35), 1)
+            radius: Style.cornerRadius
 
-            BorderSurface {
-              id: deviceRow
-              required property var modelData
+            Text {
+              id: errorText
+              anchors.left: parent.left
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              anchors.leftMargin: Style.space(12)
+              anchors.rightMargin: Style.space(12)
+              text: root.openlogiService ? root.openlogiService.lastError : "OpenLogi unavailable"
+              color: root.popupDim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+          }
 
+          Column {
+            visible: !root.failed
+            width: parent.width
+            spacing: Style.spacing.md
+
+            PanelSectionHeader {
               width: parent.width
-              height: Math.max(deviceIcon.implicitHeight, deviceName.implicitHeight,
-                connectionIcon.implicitHeight, batteryLevel.implicitHeight)
-                + Style.spacing.lg
-              color: root.alpha(root.foreground, 0.05)
-              radius: Style.cornerRadius
+              text: "DEVICES"
+              foreground: root.popupForeground
+              fontFamily: root.fontFamily
+            }
 
-              Text {
-                id: deviceIcon
-                anchors.left: parent.left
-                anchors.leftMargin: Style.space(8)
-                anchors.verticalCenter: parent.verticalCenter
-                width: Style.space(22)
-                text: Model.deviceIcon(deviceRow.modelData.kind)
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.body
-                horizontalAlignment: Text.AlignHCenter
-              }
+            Repeater {
+              model: root.devices
 
-              Text {
-                id: batteryLevel
-                anchors.right: parent.right
-                anchors.rightMargin: Style.space(8)
-                anchors.verticalCenter: parent.verticalCenter
-                text: deviceRow.modelData.batteryAvailable
-                  ? deviceRow.modelData.percentage + "%"
-                  : "Unavailable"
-                color: deviceRow.modelData.batteryAvailable ? root.foreground : root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
-              }
+              BorderSurface {
+                id: deviceRow
+                required property var modelData
 
-              Text {
-                id: connectionIcon
-                anchors.right: batteryLevel.left
-                anchors.rightMargin: Style.space(10)
-                anchors.verticalCenter: parent.verticalCenter
-                width: Style.space(18)
-                text: Model.connectionIcon(deviceRow.modelData.connectionKind)
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
-                horizontalAlignment: Text.AlignHCenter
+                width: parent.width
+                height: Math.max(deviceIcon.implicitHeight, deviceName.implicitHeight,
+                  connectionIcon.implicitHeight, batteryLevel.implicitHeight)
+                  + Style.spacing.lg
+                color: root.alpha(root.popupForeground, 0.05)
+                radius: Style.cornerRadius
 
-                HoverHandler {
-                  id: connectionHover
+                Text {
+                  id: deviceIcon
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(8)
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(22)
+                  text: Model.deviceIcon(deviceRow.modelData.kind)
+                  color: root.popupForeground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                  horizontalAlignment: Text.AlignHCenter
                 }
 
-                PanelToolTip {
-                  visible: connectionHover.hovered
-                  text: deviceRow.modelData.connectionLabel
-                  fontFamily: root.fontFamily
+                Text {
+                  id: batteryLevel
+                  anchors.right: parent.right
+                  anchors.rightMargin: Style.space(8)
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: deviceRow.modelData.batteryAvailable
+                    ? deviceRow.modelData.percentage + "%"
+                    : "Unavailable"
+                  color: deviceRow.modelData.batteryAvailable ? root.popupForeground : root.popupDim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
                 }
-              }
 
-              Text {
-                id: deviceName
-                anchors.left: deviceIcon.right
-                anchors.right: connectionIcon.left
-                anchors.leftMargin: Style.space(8)
-                anchors.rightMargin: Style.space(12)
-                anchors.verticalCenter: parent.verticalCenter
-                text: deviceRow.modelData.name
-                color: root.foreground
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.bodySmall
-                elide: Text.ElideRight
+                Text {
+                  id: connectionIcon
+                  anchors.right: batteryLevel.left
+                  anchors.rightMargin: Style.space(10)
+                  anchors.verticalCenter: parent.verticalCenter
+                  width: Style.space(18)
+                  text: Model.connectionIcon(deviceRow.modelData.connectionKind)
+                  color: root.popupDim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  horizontalAlignment: Text.AlignHCenter
+
+                  HoverHandler {
+                    id: connectionHover
+                  }
+
+                  PanelToolTip {
+                    visible: connectionHover.hovered
+                    text: deviceRow.modelData.connectionLabel
+                    fontFamily: root.fontFamily
+                  }
+                }
+
+                Text {
+                  id: deviceName
+                  anchors.left: deviceIcon.right
+                  anchors.right: connectionIcon.left
+                  anchors.leftMargin: Style.space(8)
+                  anchors.rightMargin: Style.space(12)
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: deviceRow.modelData.name
+                  color: root.popupForeground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  elide: Text.ElideRight
+                }
               }
             }
           }
