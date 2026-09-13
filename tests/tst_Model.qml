@@ -205,7 +205,7 @@ TestCase {
   }
 
   function test_commandResultAcceptsSuccessfulOutput() {
-    var result = Model.commandResult(0, deviceLine("Mouse", "mouse", "50% good"), "", false)
+    var result = Model.commandResult(0, deviceLine("Mouse", "mouse", "50% good"), "")
     verify(result.ok)
     verify(result.output.indexOf("Mouse") !== -1)
     compare(result.error, "")
@@ -213,25 +213,25 @@ TestCase {
 
   function test_commandResultAcceptsExpectedNoHardwareExit() {
     var output = "No Logitech HID++ devices or webcams found."
-    var result = Model.commandResult(2, output, "diagnostic note", false)
+    var result = Model.commandResult(2, output, "diagnostic note")
     verify(result.ok)
     compare(result.output, output)
   }
 
   function test_commandResultReportsMissingCommand() {
-    var result = Model.commandResult(127, "", "openlogi command not found", false)
+    var result = Model.commandResult(127, "", "openlogi command not found")
     verify(!result.ok)
     compare(result.error, "openlogi command not found")
   }
 
   function test_commandResultReportsOrdinaryFailure() {
-    var result = Model.commandResult(1, "partial output", "openlogi failed", false)
+    var result = Model.commandResult(1, "partial output", "openlogi failed")
     verify(!result.ok)
     compare(result.error, "openlogi failed")
   }
 
   function test_commandResultReportsTimeoutFirst() {
-    var result = Model.commandResult(0, deviceLine("Mouse", "mouse", "50% good"), "", true)
+    var result = Model.commandResult(122, deviceLine("Mouse", "mouse", "50% good"), "")
     verify(!result.ok)
     compare(result.error, "openlogi list timed out")
   }
@@ -252,5 +252,115 @@ TestCase {
   function test_outOfRangePercentageFailsClosed() {
     var parsed = Model.parseList(deviceLine("Impossible Mouse", "mouse", "101% full (charging)"))
     verify(!parsed.ok)
+  }
+
+  function assertRejected(output) {
+    var parsed = Model.parseList(output)
+    verify(!parsed.ok)
+    verify(!parsed.noHardware)
+    compare(parsed.devices.length, 0)
+    verify(parsed.error.length > 0 && parsed.error.length <= 180)
+  }
+
+  function test_parserSizeBoundaries() {
+    var exactOutput = ("x".repeat(2047) + "\n").repeat(32)
+    compare(exactOutput.length, 65536)
+    verify(Model.parseList(exactOutput).ok)
+    assertRejected(exactOutput + "x")
+
+    var exactLines = "x\n".repeat(1023) + "x"
+    verify(Model.parseList(exactLines).ok)
+    assertRejected(exactLines + "\nx")
+    verify(Model.parseList(exactLines.replace(/\n/g, "\r\n")).ok)
+
+    verify(Model.parseList("x".repeat(2048)).ok)
+    verify(Model.parseList("x".repeat(2048) + "\r\n").ok)
+    assertRejected("x".repeat(2049))
+    assertRejected("x".repeat(2049) + "\r\n")
+  }
+
+  function test_deviceCountIncludesOfflineDevices() {
+    var rows = []
+    for (var i = 0; i < 24; i++) {
+      rows.push(deviceLine("Mouse " + i, "mouse", "50% good", i % 2 ? "○" : "●"))
+    }
+    var parsed = Model.parseList(rows.join("\n"))
+    verify(parsed.ok)
+    compare(parsed.devices.length, 24)
+    compare(Model.onlineDevices(parsed.devices).length, 12)
+    rows.push(deviceLine("One too many", "mouse", "50% good", "○"))
+    assertRejected(rows.join("\n"))
+  }
+
+  function test_fieldLengthBoundaries_data() {
+    return [
+      { tag: "device name", field: "name", limit: 256 },
+      { tag: "parent name", field: "parent", limit: 256 },
+      { tag: "kind", field: "kind", limit: 64 },
+      { tag: "wpid", field: "wpid", limit: 64 },
+      { tag: "battery", field: "battery", limit: 256 }
+    ]
+  }
+
+  function fieldOutput(field, length) {
+    var value = "x".repeat(length)
+    var row = deviceLine(field === "name" ? value : "Mouse",
+      field === "kind" ? value : "mouse", field === "battery" ? value : "50% good")
+    if (field === "wpid") row = row.replace("wpid=0000", "wpid=" + value)
+    if (field === "parent") row = value + " (—, vid=0000 pid=0001)\n" + row
+    return row
+  }
+
+  function test_fieldLengthBoundaries(data) {
+    verify(Model.parseList(fieldOutput(data.field, data.limit)).ok)
+    assertRejected(fieldOutput(data.field, data.limit + 1))
+  }
+
+  function test_unicodeNamesUseUtf16Bounds() {
+    var name = "🐭".repeat(128)
+    compare(name.length, 256)
+    var parsed = Model.parseList(deviceLine(name, "mouse", "50% good"))
+    verify(parsed.ok)
+    compare(parsed.devices[0].name, name)
+    assertRejected(deviceLine(name + "x", "mouse", "50% good"))
+  }
+
+  function test_slotBoundaries() {
+    var row = deviceLine("Mouse", "mouse", "50% good")
+    verify(Model.parseList(row.replace("slot 1", "slot 0")).ok)
+    verify(Model.parseList(row.replace("slot 1", "slot 255")).ok)
+    var invalid = ["256", "-1", "1.5", "9".repeat(100), "NaN"]
+    for (var i = 0; i < invalid.length; i++) {
+      assertRejected(row.replace("slot 1", "slot " + invalid[i]))
+    }
+  }
+
+  function test_malformedRowsDiscardPreviouslyParsedDevices() {
+    var output = deviceLine("Mouse", "mouse", "50% good") + "\n"
+      + "  └─ slot 1 ● Changed format\n".repeat(100)
+    assertRejected(output)
+  }
+
+  function test_commandFailuresAreDistinctAndIgnorePartialOutput() {
+    var codes = [120, 121, 122, 123, 127]
+    var errors = []
+    for (var i = 0; i < codes.length; i++) {
+      var result = Model.commandResult(codes[i], "No Logitech HID++ devices or webcams found.", "untrusted")
+      verify(!result.ok)
+      compare(result.output, "")
+      verify(result.error !== "untrusted")
+      verify(errors.indexOf(result.error) === -1)
+      errors.push(result.error)
+    }
+  }
+
+  function test_commandResultRejectsInvalidSuccessAndNoHardware() {
+    var output = "No Logitech HID++ devices or webcams found.\n" + "x".repeat(2049)
+    verify(!Model.commandResult(0, output, "").ok)
+    verify(!Model.commandResult(2, output, "").ok)
+    verify(!Model.commandResult(2, deviceLine("Mouse", "mouse", "50% good"), "").ok)
+    var result = Model.commandResult(1, "", "x".repeat(8192))
+    verify(!result.ok)
+    compare(result.error.length, 180)
   }
 }

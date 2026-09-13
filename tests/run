@@ -39,6 +39,7 @@ ln -s "$omarchy_root/shell/Ui" "$qml_import_root/qs/Ui"
 
 cd "$repo_root"
 
+/usr/bin/python3 -I -B -m unittest discover -s tests -p 'test_*.py' -v
 "$validator" .
 "$qmllint_bin" -I "$qml_import_root" \
   --missing-property disable \

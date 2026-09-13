@@ -1,0 +1,130 @@
+#!/usr/bin/python3
+"""Keep untrusted OpenLogi output out of Quickshell until it is bounded."""
+
+import os
+import selectors
+import signal
+import subprocess
+import sys
+import time
+
+
+STDOUT_LIMIT = 64 * 1024
+STDERR_LIMIT = 8 * 1024
+TIMEOUT_SECONDS = 5
+ERRORS = {
+    120: b"openlogi list exceeded the stdout limit\n",
+    121: b"openlogi list exceeded the stderr limit\n",
+    122: b"openlogi list timed out\n",
+    123: b"OpenLogi helper failed or was cancelled\n",
+    127: b"openlogi command not found\n",
+}
+
+
+class GuardFailure(Exception):
+    def __init__(self, code):
+        self.code = code
+
+
+def collect(command):
+    """Return bounded binary streams; failures never return partial output."""
+    cancelled = False
+
+    def cancel(_signum, _frame):
+        nonlocal cancelled
+        cancelled = True
+
+    signals = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP)
+    previous = {sig: signal.signal(sig, cancel) for sig in signals}
+    process = None
+    deadline = time.monotonic() + TIMEOUT_SECONDS
+    stdout = bytearray()
+    stderr = bytearray()
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+            start_new_session=True,
+        )
+        with selectors.DefaultSelector() as selector:
+            for stream, buffer, limit, code in (
+                (process.stdout, stdout, STDOUT_LIMIT, 120),
+                (process.stderr, stderr, STDERR_LIMIT, 121),
+            ):
+                os.set_blocking(stream.fileno(), False)
+                selector.register(stream, selectors.EVENT_READ, (buffer, limit, code))
+
+            while True:
+                if cancelled:
+                    raise GuardFailure(123)
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise GuardFailure(122)
+
+                # Short waits also observe cancellation without signal exceptions
+                # interrupting process creation or cleanup.
+                interval = min(remaining, 0.1)
+                if not selector.get_map():
+                    try:
+                        code = process.wait(timeout=interval)
+                        return code if code in (0, 2) else 1, stdout, stderr
+                    except subprocess.TimeoutExpired:
+                        continue
+
+                for key, _events in selector.select(interval):
+                    buffer, limit, code = key.data
+                    try:
+                        chunk = os.read(key.fd, min(4096, limit - len(buffer) + 1))
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                    elif len(buffer) + len(chunk) > limit:
+                        raise GuardFailure(code)
+                    else:
+                        buffer.extend(chunk)
+    except FileNotFoundError:
+        raise GuardFailure(127) from None
+    finally:
+        try:
+            if process is not None:
+                # Do not poll/reap early: the leader may have exited while a
+                # descendant still holds a pipe. Its group must still be killed.
+                if process.returncode is None:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                process.stdout.close()
+                process.stderr.close()
+                process.wait()
+        finally:
+            for sig, handler in previous.items():
+                signal.signal(sig, handler)
+
+
+def main():
+    try:
+        code, stdout, stderr = collect(["openlogi", "list"])
+    except GuardFailure as failure:
+        code, stdout, stderr = failure.code, b"", ERRORS[failure.code]
+    except Exception:
+        # Never forward exception messages or tracebacks containing producer data.
+        code, stdout, stderr = 123, b"", ERRORS[123]
+
+    try:
+        sys.stdout.buffer.write(stdout)
+        sys.stdout.buffer.flush()
+        sys.stderr.buffer.write(stderr)
+        sys.stderr.buffer.flush()
+    except BrokenPipeError:
+        # The consumer disappeared; the producer has already been reaped.
+        os._exit(123)
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())

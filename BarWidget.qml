@@ -156,6 +156,7 @@ BarWidget {
               anchors.leftMargin: Style.space(12)
               anchors.rightMargin: Style.space(12)
               text: root.openlogiService ? root.openlogiService.lastError : "OpenLogi unavailable"
+              textFormat: Text.PlainText
               color: root.popupDim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
@@ -246,6 +247,7 @@ BarWidget {
                   anchors.rightMargin: Style.space(12)
                   anchors.verticalCenter: parent.verticalCenter
                   text: deviceRow.modelData.name
+                  textFormat: Text.PlainText
                   color: root.popupForeground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall

@@ -8,7 +8,6 @@ Item {
   visible: false
 
   readonly property int refreshIntervalMs: 5 * 60 * 1000
-  readonly property int commandTimeoutMs: 15 * 1000
 
   property var devices: []
   property var lowestDevice: null
@@ -16,7 +15,6 @@ Item {
   property string lastError: ""
   property bool refreshing: false
   property bool refreshPending: false
-  property bool timedOut: false
 
   readonly property bool hasReadableBattery: lowestDevice !== null
   readonly property bool failed: status === "error"
@@ -49,17 +47,23 @@ Item {
   }
 
   function refresh() {
-    if (listProcess.running) {
+    if (refreshing) {
       refreshPending = true
       return
     }
 
     stdoutText = ""
     stderrText = ""
-    timedOut = false
     refreshing = true
     listProcess.running = true
-    commandTimeout.restart()
+  }
+
+  function finishRefresh() {
+    refreshing = false
+    if (refreshPending) {
+      refreshPending = false
+      Qt.callLater(root.refresh)
+    }
   }
 
   property string stdoutText: ""
@@ -73,26 +77,16 @@ Item {
     onTriggered: root.refresh()
   }
 
-  Timer {
-    id: commandTimeout
-    interval: root.commandTimeoutMs
-    repeat: false
-    onTriggered: {
-      if (!listProcess.running) return
-      root.timedOut = true
-      listProcess.running = false
-    }
-  }
-
   Process {
     id: listProcess
     running: false
     command: [
-      "sh",
-      "-c",
-      "command -v openlogi >/dev/null 2>&1 || { echo 'openlogi command not found' >&2; exit 127; }; exec openlogi list"
+      "/usr/bin/python3", "-I",
+      decodeURIComponent(Qt.resolvedUrl("openlogi-bounded.py").toString().substring(7))
     ]
 
+    // Only the bundled helper reaches these collectors. It independently caps
+    // both streams before forwarding anything and owns the producer deadline.
     stdout: StdioCollector {
       id: stdoutCollector
       waitForEnd: true
@@ -106,19 +100,18 @@ Item {
     }
 
     onExited: function(exitCode) {
-      commandTimeout.stop()
-      root.refreshing = false
-
-      var stdout = String(stdoutCollector.text || root.stdoutText || "")
-      var stderr = String(stderrCollector.text || root.stderrText || "")
-      var result = Model.commandResult(exitCode, stdout, stderr, root.timedOut)
+      var result = Model.commandResult(exitCode, root.stdoutText, root.stderrText)
       if (result.ok) root.applyOutput(result.output)
       else root.fail(result.error)
+      root.finishRefresh()
+    }
 
-      root.timedOut = false
-      if (root.refreshPending) {
-        root.refreshPending = false
-        Qt.callLater(root.refresh)
+    onRunningChanged: {
+      // FailedToStart emits runningChanged without exited. Normal exits finish
+      // the refresh first, so this also avoids reusing a previous poll's output.
+      if (!running && root.refreshing) {
+        root.fail("OpenLogi helper could not start; check /usr/bin/python3")
+        root.finishRefresh()
       }
     }
   }

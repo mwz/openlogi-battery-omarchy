@@ -11,6 +11,41 @@ var ICON_BLUETOOTH = "󰂯"
 var ICON_USB = "󰕓"
 var ICON_WIRELESS = "󰖩"
 
+// The helper enforces byte limits before QML. These bound parsing and retained
+// UI data in UTF-16 code units, even when parseList is called independently.
+var MAX_OUTPUT_LENGTH = 65536
+var MAX_LINES = 1024
+var MAX_LINE_LENGTH = 2048
+var MAX_DEVICES = 24
+var MAX_NAME_LENGTH = 256
+var MAX_FIELD_LENGTH = 64
+var MAX_BATTERY_LENGTH = 256
+
+function invalidList(error) {
+  return {
+    ok: false, noHardware: false, devices: [],
+    error: error || "OpenLogi returned device data that this plugin cannot read"
+  }
+}
+
+function boundedLines(text) {
+  if (text.length > MAX_OUTPUT_LENGTH) return null
+  var lines = []
+  var start = 0
+  while (start <= text.length) {
+    if (lines.length >= MAX_LINES) return null
+    var end = text.indexOf("\n", start)
+    if (end === -1) end = text.length
+    var contentEnd = end
+    if (end < text.length && end > start && text.charAt(end - 1) === "\r") contentEnd--
+    if (contentEnd - start > MAX_LINE_LENGTH) return null
+    lines.push(text.substring(start, contentEnd))
+    if (end === text.length) break
+    start = end + 1
+  }
+  return lines
+}
+
 function deviceIcon(kind) {
   switch (String(kind || "").trim().toLowerCase()) {
   case "mouse":
@@ -108,22 +143,32 @@ function lowestBatteryDevice(devices) {
 }
 
 function parseDeviceLine(line, order) {
-  var row = String(line || "").match(/^\s*[├└]─\s+slot\s+(\d+)\s+([●○])\s+(.+)$/)
-  if (!row) return null
+  var text = String(line || "")
+  if (text.length > MAX_LINE_LENGTH) return { malformed: true }
+  var row = text.match(/^\s*[├└]─\s+slot\s+(\d{1,3})\s+([●○])\s+(.+)$/)
+  if (!row) return /^\s*[├└]─\s+slot\b/.test(text) ? { malformed: true } : null
+  if (Number(row[1]) > 255) return { malformed: true }
 
   var detail = row[3].match(/^(.*?)\s+\(([^,()]+),\s*wpid=([^,]*),\s*battery=(.*)\)\s*$/)
-  if (!detail) return { malformed: true, line: String(line || "") }
+  if (!detail) return { malformed: true }
+
+  var name = detail[1].trim()
+  var kind = detail[2].trim().toLowerCase()
+  if (name.length > MAX_NAME_LENGTH || kind.length > MAX_FIELD_LENGTH
+      || detail[3].length > MAX_FIELD_LENGTH || detail[4].length > MAX_BATTERY_LENGTH) {
+    return { malformed: true }
+  }
 
   var batteryText = String(detail[4] || "").trim()
   var percentageMatch = batteryText.match(/^(\d{1,3})%(?:\s|$)/)
   var percentage = percentageMatch ? Number(percentageMatch[1]) : -1
-  if (percentage > 100) return { malformed: true, line: String(line || "") }
+  if (percentage > 100) return { malformed: true }
 
   return {
     slot: Number(row[1]),
     online: row[2] === "●",
-    name: String(detail[1] || "").trim(),
-    kind: String(detail[2] || "").trim().toLowerCase(),
+    name: name,
+    kind: kind,
     batteryAvailable: percentage >= 0,
     percentage: percentage,
     order: Number(order || 0)
@@ -131,10 +176,14 @@ function parseDeviceLine(line, order) {
 }
 
 function parseInventoryHeader(line) {
-  var header = String(line || "").match(/^(.+?)\s+\([^,]*,\s*vid=([0-9a-f]{4})\s+pid=([0-9a-f]{4})\)\s*$/i)
+  var text = String(line || "")
+  if (text.length > MAX_LINE_LENGTH) return { malformed: true }
+  var header = text.match(/^(.+?)\s+\([^,]*,\s*vid=([0-9a-f]{4})\s+pid=([0-9a-f]{4})\)\s*$/i)
   if (!header) return null
+  var name = header[1].trim()
+  if (name.length > MAX_NAME_LENGTH) return { malformed: true }
   return {
-    name: String(header[1] || "").trim(),
+    name: name,
     productId: parseInt(header[3], 16)
   }
 }
@@ -159,7 +208,9 @@ function connectionFromParent(parent, slot) {
 }
 
 function parseModelLine(line) {
-  var model = String(line || "").match(/\bmodel_ids=\[([0-9a-f,\s]+)\].*\btransports=([^\s]+)\s*$/i)
+  var text = String(line || "")
+  if (text.length > MAX_LINE_LENGTH) return null
+  var model = text.match(/\bmodel_ids=\[([0-9a-f,\s]+)\].*\btransports=([^\s]+)\s*$/i)
   if (!model) return null
 
   var modelIds = model[1].split(",").map(function(value) {
@@ -189,28 +240,36 @@ function directConnectionFromModel(parentProductId, model) {
   return "direct"
 }
 
-function commandResult(exitCode, stdout, stderr, timedOut) {
+function commandResult(exitCode, stdout, stderr) {
+  var code = Number(exitCode)
+  var failures = {
+    120: "openlogi list exceeded the stdout limit",
+    121: "openlogi list exceeded the stderr limit",
+    122: "openlogi list timed out",
+    123: "OpenLogi helper failed or was cancelled",
+    127: "openlogi command not found"
+  }
+  if (failures[code]) return { ok: false, output: "", error: failures[code] }
+
   var stdoutText = String(stdout || "")
   var stderrText = String(stderr || "")
-
-  if (timedOut === true) {
-    return { ok: false, output: "", error: "openlogi list timed out" }
-  }
-
-  var parsed = parseList(stdoutText)
-  if (Number(exitCode) === 0 || (Number(exitCode) === 2 && parsed.noHardware)) {
-    return { ok: true, output: stdoutText, error: "" }
+  if (code === 0 || code === 2) {
+    var parsed = parseList(stdoutText)
+    if (!parsed.ok) return { ok: false, output: "", error: parsed.error }
+    if (code === 0 || parsed.noHardware) {
+      return { ok: true, output: stdoutText, error: "" }
+    }
   }
 
   var detail = stderrText || stdoutText || "openlogi list failed with exit code " + exitCode
-  return { ok: false, output: "", error: detail }
+  return { ok: false, output: "", error: detail.substring(0, 180) }
 }
 
 function parseList(output) {
   var text = String(output || "")
-  var lines = text.split(/\r?\n/)
+  var lines = boundedLines(text)
+  if (!lines) return invalidList("OpenLogi output exceeded the parser limits")
   var devices = []
-  var malformed = []
   var order = 0
   var currentParent = null
   var lastDevice = null
@@ -218,6 +277,7 @@ function parseList(output) {
   for (var i = 0; i < lines.length; i++) {
     var header = parseInventoryHeader(lines[i])
     if (header) {
+      if (header.malformed) return invalidList()
       currentParent = header
       lastDevice = null
       continue
@@ -226,15 +286,12 @@ function parseList(output) {
     var parsed = parseDeviceLine(lines[i], order)
     if (parsed) {
       order += 1
-      if (parsed.malformed) {
-        malformed.push(parsed.line)
-        lastDevice = null
-      } else {
-        parsed.connectionKind = connectionFromParent(currentParent, parsed.slot)
-        parsed.connectionLabel = connectionLabel(parsed.connectionKind)
-        devices.push(parsed)
-        lastDevice = parsed
-      }
+      if (parsed.malformed) return invalidList()
+      if (devices.length >= MAX_DEVICES) return invalidList("OpenLogi returned more than 24 devices")
+      parsed.connectionKind = connectionFromParent(currentParent, parsed.slot)
+      parsed.connectionLabel = connectionLabel(parsed.connectionKind)
+      devices.push(parsed)
+      lastDevice = parsed
       continue
     }
 
@@ -243,15 +300,6 @@ function parseList(output) {
       var parentProductId = currentParent ? currentParent.productId : NaN
       lastDevice.connectionKind = directConnectionFromModel(parentProductId, model)
       lastDevice.connectionLabel = connectionLabel(lastDevice.connectionKind)
-    }
-  }
-
-  if (malformed.length > 0) {
-    return {
-      ok: false,
-      noHardware: false,
-      devices: [],
-      error: "OpenLogi returned device data that this plugin cannot read"
     }
   }
 
