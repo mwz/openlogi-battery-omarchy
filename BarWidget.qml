@@ -62,13 +62,16 @@ BarWidget {
     bar: root.bar
     text: root.failed
       ? "?"
-      : Model.deviceIcon(root.lowestDevice ? root.lowestDevice.kind : "")
+      : (root.lowestDevice && root.lowestDevice.charging
+          ? Model.ICON_BATTERY_CHARGING
+          : Model.deviceIcon(root.lowestDevice ? root.lowestDevice.kind : ""))
         + " " + String(root.lowestDevice ? root.lowestDevice.percentage : "") + "%"
     dimmed: root.failed
     tooltipText: root.failed
       ? (root.openlogiService ? root.openlogiService.lastError : "OpenLogi unavailable")
       : (root.lowestDevice
           ? root.lowestDevice.name + ": " + root.lowestDevice.percentage + "%"
+            + (root.lowestDevice.charging ? " (charging)" : "")
           : "")
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.LeftButton) root.toggle()
@@ -208,9 +211,9 @@ BarWidget {
                   anchors.right: parent.right
                   anchors.rightMargin: Style.space(8)
                   anchors.verticalCenter: parent.verticalCenter
-                  text: deviceRow.modelData.batteryAvailable
+                  text: (deviceRow.modelData.batteryAvailable
                     ? deviceRow.modelData.percentage + "%"
-                    : "Unavailable"
+                    : "Unavailable") + (deviceRow.modelData.charging ? " (charging)" : "")
                   color: deviceRow.modelData.batteryAvailable ? root.popupForeground : root.popupDim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall

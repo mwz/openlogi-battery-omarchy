@@ -1,6 +1,7 @@
 .pragma library
 
 var ICON_BATTERY = "󰁹"
+var ICON_BATTERY_CHARGING = "󰂄"
 var ICON_MOUSE = "󰍽"
 var ICON_KEYBOARD = "󰌌"
 var ICON_TOUCHPAD = "󰟸"
@@ -171,6 +172,7 @@ function parseDeviceLine(line, order) {
     kind: kind,
     batteryAvailable: percentage >= 0,
     percentage: percentage,
+    charging: /\(charging\)$/i.test(batteryText),
     order: Number(order || 0)
   }
 }
