@@ -151,7 +151,7 @@ class HelperTests(unittest.TestCase):
         )
         self.assert_terminated(int(pid_file.read_text()))
 
-    def test_helper_cancellation_kills_producer(self):
+    def cancel_helper(self, signum):
         pid_file = self.directory / "producer"
         self.executable(
             "import os, pathlib, signal, time\n"
@@ -169,16 +169,29 @@ class HelperTests(unittest.TestCase):
                 while not pid_file.exists() and time.monotonic() < until:
                     time.sleep(0.01)
                 self.assertTrue(pid_file.exists())
-                helper.send_signal(signal.SIGTERM)
+                helper.send_signal(signum)
                 stdout, stderr = helper.communicate(timeout=2)
             finally:
                 if helper.poll() is None:
                     helper.kill()
                     helper.wait()
-            self.assertEqual(helper.returncode, 123)
+            self.assertEqual(helper.returncode, -signal.SIGKILL if signum == signal.SIGKILL else 123)
             self.assertEqual(stdout, b"")
             self.assertEqual(stderr, guard.ERRORS[123])
         self.assertFalse(Path(f"/proc/{int(pid_file.read_text())}").exists())
+
+    def test_helper_cancellation_kills_producer(self):
+        self.cancel_helper(signal.SIGTERM)
+
+    def test_helper_sigkill_still_reaps_producer(self):
+        self.cancel_helper(signal.SIGKILL)
+
+    def test_dead_owner_does_not_start_producer(self):
+        with patch.object(guard.subprocess, "Popen") as popen:
+            with self.assertRaises(guard.GuardFailure) as raised:
+                guard.collect(["openlogi", "list"], owner_pid=os.getppid() + 1)
+            self.assertEqual(raised.exception.code, 123)
+            popen.assert_not_called()
 
     def test_exit_codes_cannot_impersonate_guard_failures(self):
         for code in (0, 2, 1, 120, 121, 122, 123, 127):

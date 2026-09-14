@@ -26,7 +26,7 @@ class GuardFailure(Exception):
         self.code = code
 
 
-def collect(command):
+def collect(command, owner_pid=None):
     """Return bounded binary streams; failures never return partial output."""
     cancelled = False
 
@@ -41,6 +41,8 @@ def collect(command):
     stdout = bytearray()
     stderr = bytearray()
     try:
+        if owner_pid is not None and os.getppid() != owner_pid:
+            raise GuardFailure(123)
         process = subprocess.Popen(
             command,
             stdin=subprocess.DEVNULL,
@@ -58,7 +60,7 @@ def collect(command):
                 selector.register(stream, selectors.EVENT_READ, (buffer, limit, code))
 
             while True:
-                if cancelled:
+                if cancelled or (owner_pid is not None and os.getppid() != owner_pid):
                     raise GuardFailure(123)
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
@@ -106,9 +108,9 @@ def collect(command):
                 signal.signal(sig, handler)
 
 
-def main():
+def main(owner_pid=None):
     try:
-        code, stdout, stderr = collect(["openlogi", "list"])
+        code, stdout, stderr = collect(["openlogi", "list"], owner_pid)
     except GuardFailure as failure:
         code, stdout, stderr = failure.code, b"", ERRORS[failure.code]
     except Exception:
@@ -126,5 +128,29 @@ def main():
     return code
 
 
+def run():
+    # Quickshell SIGKILLs its immediate child when the service is destroyed.
+    # Keep the guard in a worker that can still kill/reap the producer after
+    # that launcher dies. Only the guard writes to the inherited QML pipes.
+    owner_pid = os.getpid()
+    try:
+        worker_pid = os.fork()
+    except OSError:
+        os.write(2, ERRORS[123])
+        return 123
+    if worker_pid == 0:
+        os._exit(main(owner_pid))
+
+    def cancel(_signum, _frame):
+        # The worker observes our exit, including SIGKILL, through getppid().
+        raise SystemExit(123)
+
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, cancel)
+    _, status = os.waitpid(worker_pid, 0)
+    code = os.waitstatus_to_exitcode(status)
+    return code if code >= 0 else 123
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run())
