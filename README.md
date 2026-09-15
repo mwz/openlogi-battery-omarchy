@@ -20,7 +20,8 @@ Point to the connection icon to see its label.
 
 - Omarchy 4 with its Quickshell plugin system
 - OpenLogi installed and the `openlogi` command available in your shell
-- Python 3 at `/usr/bin/python3` (Arch package: `python`); no Python packages needed
+- Python 3 at `/usr/bin/python3` (Arch package: `python`); no Python packages
+  needed
 - A Nerd Font for the Omarchy bar (the default font works)
 
 On Omarchy, install the community-maintained
@@ -32,13 +33,16 @@ yay -S openlogi-bin
 ```
 
 Alternatively, install OpenLogi with its
-[official Linux instructions](https://github.com/AprilNEA/OpenLogi#installation).
-Make sure that the CLI can inspect your devices:
+[official Linux instructions](https://github.com/AprilNEA/OpenLogi#linux). Make
+sure that the CLI can inspect your devices:
 
 ```sh
 openlogi --version
 openlogi list
 ```
+
+In case of permission errors please refer to the OpenLogi
+[documentation](https://github.com/AprilNEA/OpenLogi/blob/master/docs/INSTALL-linux.md#device-access-udev-rules).
 
 The plugin does not install OpenLogi. It does not change the device
 configuration. The plugin runs `openlogi list` at startup and every five
@@ -88,11 +92,11 @@ producer's process group, reaps the direct child, and discards the output.
 Cancellation also cleans up the producer.
 
 The parser accepts at most 65,536 UTF-16 code units, 1,024 lines (including a
-trailing empty line), 2,048 code units per line, and 24 devices including offline
-devices. Device and parent names are limited to 256 code units, kind and WPID
-fields to 64, and battery text to 256. Slots must be integers from 0 to 255.
-Malformed or excessive input produces an error instead of a partial inventory.
-Names and errors are rendered as plain text.
+trailing empty line), 2,048 code units per line, and 24 devices including
+offline devices. Device and parent names are limited to 256 code units, kind and
+WPID fields to 64, and battery text to 256. Slots must be integers from 0
+to 255. Malformed or excessive input produces an error instead of a partial
+inventory. Names and errors are rendered as plain text.
 
 The plugin does not write command output to disk, send it over the network, or
 request administrator access. These limits protect the shell from excessive
@@ -108,7 +112,8 @@ Run the tests from this repository:
 
 The suite includes synthetic producer tests for output limits, timeout and
 process cleanup, parser boundary tests, and headless Quickshell checks for
-refresh coalescing, startup failure, and recovery. No connected hardware is required.
+refresh coalescing, startup failure, and recovery. No connected hardware is
+required.
 
 If the Omarchy source is outside `/usr/share/omarchy`, set `OMARCHY_PATH` to its
 location.
