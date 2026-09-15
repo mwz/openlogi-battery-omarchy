@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "mwz.openlogi-battery",
   "name": "OpenLogi Battery Indicator",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "mwz",
   "license": "MIT",
   "description": "Displays peripheral battery levels reported by the OpenLogi CLI.",
