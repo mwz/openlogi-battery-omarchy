@@ -19,7 +19,7 @@ Point to the connection icon to see its label.
 ## Requirements
 
 - Omarchy 4 with its Quickshell plugin system
-- OpenLogi installed and the `openlogi` command available in your shell
+- OpenLogi installed at `/usr/bin/openlogi` as a regular executable owned by root
 - Python 3 at `/usr/bin/python3` (Arch package: `python`); no Python packages
   needed
 - A Nerd Font for the Omarchy bar (the default font works)
@@ -34,11 +34,12 @@ yay -S openlogi-bin
 
 Alternatively, install OpenLogi with its
 [official Linux instructions](https://github.com/AprilNEA/OpenLogi#linux). Make
-sure that the CLI can inspect your devices:
+sure that the installation meets the path and ownership requirements above.
+Make sure that the CLI can inspect your devices:
 
 ```sh
-openlogi --version
-openlogi list
+/usr/bin/openlogi --version
+/usr/bin/openlogi list
 ```
 
 In case of permission errors please refer to the OpenLogi
@@ -84,8 +85,18 @@ This does not remove OpenLogi or change its configuration.
 
 ## Privacy and security
 
-The plugin runs the local `openlogi list` command through a bundled Python
-helper. The helper buffers at most 64 KiB of stdout and 8 KiB of stderr before
+The plugin runs `/usr/bin/openlogi list` through a bundled Python helper.
+The executable and its parent directories must belong to root and must not
+allow group or other users to write. The helper rejects symbolic links in
+this path and does not search `PATH` for another executable. User-local
+installations are not supported.
+
+The command runs from `/` with only `PATH=/usr/bin`, `LC_ALL=C`, and
+`XDG_RUNTIME_DIR=/run/user/<uid>` in its environment. The helper uses the current
+user ID for `<uid>` so OpenLogi can reach its background service.
+It does not inherit environment variables from the shell.
+
+The helper buffers at most 64 KiB of stdout and 8 KiB of stderr before
 forwarding output to the Omarchy shell. If either stream exceeds its limit or
 the command exceeds a five-second monotonic deadline, the helper kills the
 producer's process group, reaps the direct child, and discards the output.

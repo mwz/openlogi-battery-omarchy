@@ -9,6 +9,8 @@ import tempfile
 import time
 import unittest
 
+from helper_fixture import write_helper_launcher
+
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -20,7 +22,7 @@ class ServiceTests(unittest.TestCase):
             # Exercise local URL decoding and argv handling as well.
             plugin = root / "plugin space # %"
             plugin.mkdir()
-            for name in ("Service.qml", "Model.js", "openlogi-bounded.py"):
+            for name in ("Service.qml", "Model.js"):
                 shutil.copyfile(REPO / name, plugin / name)
             if failed_start:
                 service = plugin / "Service.qml"
@@ -42,6 +44,7 @@ class ServiceTests(unittest.TestCase):
                 "    print('  └─ slot 1 ● Smoke Mouse (mouse, wpid=0000, battery=50% good)')\n"
             )
             executable.chmod(0o700)
+            write_helper_launcher(plugin / "openlogi-bounded.py", executable)
             shell = plugin / "shell.qml"
             shell.write_text("""
 import QtQuick
@@ -104,7 +107,7 @@ Item {
 """.replace("FAILED_START", "true" if failed_start else "false"))
             runtime = root / "runtime"
             runtime.mkdir(mode=0o700)
-            env = {**os.environ, "PATH": str(root) + ":" + os.environ["PATH"],
+            env = {**os.environ,
                    "XDG_RUNTIME_DIR": str(runtime), "QT_QPA_PLATFORM": "offscreen",
                    "QT_QPA_PLATFORMTHEME": "", "QT_QUICK_BACKEND": "software"}
             env.pop("DISPLAY", None)
@@ -132,7 +135,7 @@ Item {
     def test_service_destruction_cleans_up_producer_group(self):
         with tempfile.TemporaryDirectory(prefix="openlogi-unload-") as directory:
             root = Path(directory)
-            for name in ("Service.qml", "Model.js", "openlogi-bounded.py"):
+            for name in ("Service.qml", "Model.js"):
                 shutil.copyfile(REPO / name, root / name)
             pids_file = root / "producer.pids"
             executable = root / "openlogi"
@@ -148,6 +151,7 @@ Item {
                 "time.sleep(30)\n"
             )
             executable.chmod(0o700)
+            write_helper_launcher(root / "openlogi-bounded.py", executable)
             shell = root / "shell.qml"
             shell.write_text('''import QtQuick
 import Quickshell.Io
@@ -177,7 +181,7 @@ Item {
 '''.replace("PID_FILE", str(pids_file)))
             runtime = root / "runtime"
             runtime.mkdir(mode=0o700)
-            env = {**os.environ, "PATH": str(root) + ":" + os.environ["PATH"],
+            env = {**os.environ,
                    "XDG_RUNTIME_DIR": str(runtime), "QT_QPA_PLATFORM": "offscreen",
                    "QT_QPA_PLATFORMTHEME": "", "QT_QUICK_BACKEND": "software"}
             env.pop("DISPLAY", None)

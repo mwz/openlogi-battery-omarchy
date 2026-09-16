@@ -342,7 +342,7 @@ TestCase {
   }
 
   function test_commandFailuresAreDistinctAndIgnorePartialOutput() {
-    var codes = [120, 121, 122, 123, 127]
+    var codes = [120, 121, 122, 123, 126, 127]
     var errors = []
     for (var i = 0; i < codes.length; i++) {
       var result = Model.commandResult(codes[i], "No Logitech HID++ devices or webcams found.", "untrusted")

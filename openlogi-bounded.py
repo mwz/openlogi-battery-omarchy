@@ -4,6 +4,7 @@
 import os
 import selectors
 import signal
+import stat
 import subprocess
 import sys
 import time
@@ -17,6 +18,7 @@ ERRORS = {
     121: b"openlogi list exceeded the stderr limit\n",
     122: b"openlogi list timed out\n",
     123: b"OpenLogi helper failed or was cancelled\n",
+    126: b"OpenLogi executable is not trusted\n",
     127: b"openlogi command not found\n",
 }
 
@@ -24,6 +26,25 @@ ERRORS = {
 class GuardFailure(Exception):
     def __init__(self, code):
         self.code = code
+
+
+def trusted_executable():
+    """Accept only the system installation, including its parent directories."""
+    executable = "/usr/bin/openlogi"
+    try:
+        for path in ("/", "/usr", "/usr/bin", executable):
+            info = os.lstat(path)
+            valid_type = stat.S_ISREG if path == executable else stat.S_ISDIR
+            if (not valid_type(info.st_mode) or info.st_uid != 0
+                    or info.st_mode & 0o022):
+                raise GuardFailure(126)
+        if not os.access(executable, os.X_OK):
+            raise GuardFailure(126)
+    except FileNotFoundError:
+        raise GuardFailure(127) from None
+    except OSError:
+        raise GuardFailure(126) from None
+    return executable
 
 
 def collect(command, owner_pid=None):
@@ -50,6 +71,10 @@ def collect(command, owner_pid=None):
             stderr=subprocess.PIPE,
             bufsize=0,
             start_new_session=True,
+            env={"PATH": "/usr/bin", "LC_ALL": "C",
+                 # OpenLogi locates its background agent's socket here.
+                 "XDG_RUNTIME_DIR": f"/run/user/{os.getuid()}"},
+            cwd="/",
         )
         with selectors.DefaultSelector() as selector:
             for stream, buffer, limit, code in (
@@ -110,7 +135,7 @@ def collect(command, owner_pid=None):
 
 def main(owner_pid=None):
     try:
-        code, stdout, stderr = collect(["openlogi", "list"], owner_pid)
+        code, stdout, stderr = collect([trusted_executable(), "list"], owner_pid)
     except GuardFailure as failure:
         code, stdout, stderr = failure.code, b"", ERRORS[failure.code]
     except Exception:

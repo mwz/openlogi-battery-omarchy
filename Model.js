@@ -249,6 +249,7 @@ function commandResult(exitCode, stdout, stderr) {
     121: "openlogi list exceeded the stderr limit",
     122: "openlogi list timed out",
     123: "OpenLogi helper failed or was cancelled",
+    126: "OpenLogi executable is not trusted",
     127: "openlogi command not found"
   }
   if (failures[code]) return { ok: false, output: "", error: failures[code] }
